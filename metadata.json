@@ -1,0 +1,5 @@
+{
+  "name": "controllermidibridge",
+  "description": "Transform your Xbox controller into a fully configurable MIDI controller for Logic Pro or any DAW.",
+  "requestFramePermissions": []
+}
