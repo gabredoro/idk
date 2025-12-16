@@ -2,7 +2,7 @@
 import React from 'react';
 import { Trash2, Plus, RefreshCw } from 'lucide-react';
 import { AppSettings, MidiMapping, LogEntry, XboxState, ControllerInputType, MidiMessageType } from '../types';
-import { XBOX_BUTTON_NAMES, XBOX_AXIS_NAMES } from '../constants';
+import { XBOX_BUTTON_NAMES } from '../constants';
 
 interface MappingListProps {
     activeTab: 'mappings' | 'logs' | 'debug';
@@ -101,8 +101,8 @@ const MappingList: React.FC<MappingListProps> = ({
                                                     updateMapping(map.id, 'controllerInputIndex', parseInt(idx));
                                                 }}
                                             >
+                                                {/* Only showing Buttons now */}
                                                 <optgroup label="Buttons">{XBOX_BUTTON_NAMES.map((n, i) => <option key={i} value={`BUTTON-${i}`}>{n}</option>)}</optgroup>
-                                                <optgroup label="Axes">{XBOX_AXIS_NAMES.map((n, i) => <option key={i} value={`AXIS-${i}`}>{n}</option>)}</optgroup>
                                             </select>
                                         </div>
                                     </div>
@@ -161,24 +161,13 @@ const MappingList: React.FC<MappingListProps> = ({
                             ))}
                         </div>
                     ) : (
-                        // DEBUG VIEW
-                        <div className="grid grid-cols-2 gap-4 font-mono text-[10px]">
+                        // DEBUG VIEW (Removed Raw Axes)
+                        <div className="grid grid-cols-1 gap-4 font-mono text-[10px]">
                             <div className={`p-4 rounded-xl ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
-                                <h3 className="font-bold uppercase opacity-50 mb-4">Axes (Raw)</h3>
-                                {xboxState.axes.map((val, i) => (
-                                    <div key={i} className="flex justify-between border-b border-white/5 py-1">
-                                        <span>{XBOX_AXIS_NAMES[i]}</span>
-                                        <span style={{ color: Math.abs(val) > settings.deadzone ? settings.accentColor : 'inherit' }}>
-                                            {val.toFixed(4)}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className={`p-4 rounded-xl ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
-                                <h3 className="font-bold uppercase opacity-50 mb-4">Buttons</h3>
-                                <div className="grid grid-cols-2 gap-2">
+                                <h3 className="font-bold uppercase opacity-50 mb-4">Buttons State</h3>
+                                <div className="grid grid-cols-4 gap-4">
                                     {xboxState.buttons.map((b, i) => (
-                                        <div key={i} className={`flex items-center gap-2 ${b ? 'opacity-100' : 'opacity-30'}`}>
+                                        <div key={i} className={`flex items-center gap-2 ${b ? 'opacity-100 text-emerald-400' : 'opacity-30'}`}>
                                             <div className={`w-2 h-2 rounded-full ${b ? 'bg-emerald-500' : 'bg-gray-500'}`}></div>
                                             <span>{XBOX_BUTTON_NAMES[i] || `B${i}`}</span>
                                         </div>

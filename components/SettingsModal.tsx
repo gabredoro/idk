@@ -78,17 +78,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </div>
                             </div>
 
-                            <div className="space-y-6 pt-4 border-t border-dashed border-white/10">
-                                <div className="space-y-2">
-                                    <div className="flex justify-between px-1"><label className="text-[10px] font-bold uppercase opacity-50">Deadzone (Drift Fix)</label><span className="text-[10px] font-mono font-bold opacity-80">{settings.deadzone.toFixed(2)}</span></div>
-                                    <input type="range" min="0" max="0.5" step="0.01" value={settings.deadzone} onChange={(e) => setSettings(s => ({ ...s, deadzone: parseFloat(e.target.value) }))} className="w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-current" style={{ color: settings.accentColor }} />
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex justify-between px-1"><label className="text-[10px] font-bold uppercase opacity-50">Smoothing (Latency)</label><span className="text-[10px] font-mono font-bold opacity-80">{settings.smoothing.toFixed(2)}</span></div>
-                                    <input type="range" min="0" max="0.9" step="0.05" value={settings.smoothing} onChange={(e) => setSettings(s => ({ ...s, smoothing: parseFloat(e.target.value) }))} className="w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-current" style={{ color: settings.accentColor }} />
-                                </div>
-                            </div>
-
                             <div className="pt-4 border-t border-white/10">
                                 <button onClick={() => setShowChangelog(true)} className={`w-full py-3 rounded-xl flex items-center justify-between px-4 text-[10px] font-bold uppercase tracking-widest transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10'}`}>
                                     <span className="flex items-center gap-2"><Terminal size={14} className="opacity-50" /> Developer Log</span>

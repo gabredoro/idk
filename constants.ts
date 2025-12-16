@@ -1,3 +1,4 @@
+
 import { MidiMapping, ControllerInputType, MidiMessageType } from './types';
 
 export const XBOX_BUTTON_NAMES = [
@@ -9,12 +10,7 @@ export const XBOX_BUTTON_NAMES = [
   'Guide'
 ];
 
-export const XBOX_AXIS_NAMES = [
-  'L-Stick X', 'L-Stick Y', 
-  'R-Stick X', 'R-Stick Y'
-];
-
-// Default configuration to get sound immediately
+// Mappature di default limitate solo ai tasti
 export const DEFAULT_MAPPINGS: MidiMapping[] = [
   {
     id: 'btn-a',
@@ -51,23 +47,5 @@ export const DEFAULT_MAPPINGS: MidiMapping[] = [
     channel: 1,
     targetNumber: 65, // F4
     label: 'Crash (F4)',
-  },
-  {
-    id: 'axis-lx',
-    controllerInputIndex: 0, // L-Stick X
-    inputType: ControllerInputType.AXIS,
-    midiType: MidiMessageType.CC,
-    channel: 1,
-    targetNumber: 1, // Modulation Wheel
-    label: 'Mod Wheel',
-  },
-  {
-    id: 'axis-ly',
-    controllerInputIndex: 1, // L-Stick Y
-    inputType: ControllerInputType.AXIS,
-    midiType: MidiMessageType.CC,
-    channel: 1,
-    targetNumber: 7, // Volume
-    label: 'Volume',
   }
 ];

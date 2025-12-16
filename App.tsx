@@ -29,6 +29,24 @@ const ipcRenderer = (typeof window !== 'undefined' && window.require)
 // --- CHANGELOG DATA ---
 const CHANGELOG = [
   {
+      version: '0.1.5',
+      date: 'Analog Removal',
+      changes: [
+        'Input: Completely removed Analog Stick support (Digital Only)',
+        'UI: Simplified Settings (Removed Deadzone/Smoothing)',
+        'Core: Optimized MIDI loop for Buttons only'
+      ]
+  },
+  {
+    version: '0.1.4',
+    date: 'Debug Update',
+    changes: [
+      'Debug: Added Verbose Logging for MIDI Events',
+      'Debug: Added Protocol Detection Logging',
+      'System: Enhanced USB Wired support'
+    ]
+  },
+  {
     version: '0.1.3',
     date: 'Performance Update',
     changes: [
@@ -37,39 +55,12 @@ const CHANGELOG = [
       'UX: Improved Deadzone calculation algorithm',
       'Refactor: Modularized components'
     ]
-  },
-  {
-    version: '0.1.2',
-    date: 'Bug Fixes',
-    changes: [
-      'Input: Fixed D-Pad directional parsing (Hat Switch)',
-      'System: Improved Native Driver stability',
-      'System: Robust packet filtering'
-    ]
-  },
-  {
-    version: '0.1.1',
-    date: 'Protocol Fix',
-    changes: [
-      'Fix: Corrected 16-bit Signed Integer parsing for Sticks',
-      'Fix: Added header filtering to ignore Battery packets',
-      'System: Added Raw Data Inspector for debugging'
-    ]
-  },
-  {
-    version: '0.1.0',
-    date: 'Native Upgrade',
-    changes: [
-      'Core: Switched to Native HID Driver',
-    ]
   }
 ];
 
 const DEFAULT_SETTINGS: AppSettings = {
   themeMode: 'light', 
   accentColor: '#22d3ee', 
-  deadzone: 0.15, // Increased default deadzone for safety
-  smoothing: 0.1, // Added slight smoothing by default
 };
 
 const PRESET_COLORS = [
@@ -82,24 +73,19 @@ const PRESET_COLORS = [
   '#64748b', // Slate
 ];
 
-// Helper for smoother deadzone
-const applyDeadzone = (val: number, deadzone: number) => {
-  if (Math.abs(val) < deadzone) return 0;
-  // Re-normalize start point after deadzone to 0
-  const sign = Math.sign(val);
-  return sign * ((Math.abs(val) - deadzone) / (1 - deadzone));
-};
-
 const App: React.FC = () => {
   // --- STATE ---
   const [mappings, setMappings] = useState<MidiMapping[]>(() => {
     const saved = localStorage.getItem('xbox_midi_mappings');
-    return saved ? JSON.parse(saved) : DEFAULT_MAPPINGS;
+    // Sanitize saved mappings to remove any old AXIS mappings
+    const loaded = saved ? JSON.parse(saved) : DEFAULT_MAPPINGS;
+    return loaded.filter((m: MidiMapping) => m.inputType === ControllerInputType.BUTTON);
   });
 
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('xbox_midi_settings');
-    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    // Fallback to default if old settings format
+    return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
   });
   
   const [midiAccess, setMidiAccess] = useState<any>(null);
@@ -137,30 +123,31 @@ const App: React.FC = () => {
   });
 
   // --- REFS FOR PERFORMANCE LOOP ---
-  // These refs allow the listeners and loops to access latest state without re-binding
   const latestXboxStateRef = useRef<XboxState>(xboxState);
-  const processingStateRef = useRef<XboxState>(xboxState); // Previous state for logic diffs
+  const processingStateRef = useRef<XboxState>(xboxState); 
   const mappingsRef = useRef(mappings);
   const settingsRef = useRef(settings);
   const midiAccessRef = useRef(midiAccess);
   const selectedOutputIdRef = useRef(selectedOutputId);
 
-  // Sync refs when React state changes
   useEffect(() => { mappingsRef.current = mappings; }, [mappings]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   useEffect(() => { midiAccessRef.current = midiAccess; }, [midiAccess]);
   useEffect(() => { selectedOutputIdRef.current = selectedOutputId; }, [selectedOutputId]);
 
-  // --- PERSISTENCE ---
   useEffect(() => { localStorage.setItem('xbox_midi_mappings', JSON.stringify(mappings)); }, [mappings]);
   useEffect(() => { localStorage.setItem('xbox_midi_settings', JSON.stringify(settings)); }, [settings]);
-  useEffect(() => { if (selectedOutputId) localStorage.setItem('xbox_midi_output_id', selectedOutputId); }, [selectedOutputId]);
+  useEffect(() => { 
+      if (selectedOutputId) {
+          localStorage.setItem('xbox_midi_output_id', selectedOutputId);
+          addLog(`Output Preferences Saved: ${selectedOutputId}`, 'info');
+      }
+  }, [selectedOutputId]);
 
-  // --- LOGGING ---
   const addLog = useCallback((message: string, type: 'info' | 'midi' | 'error' = 'info') => {
     setLogs(prev => [
       { id: Date.now().toString() + Math.random(), timestamp: new Date().toLocaleTimeString(), message, type },
-      ...prev.slice(0, 49)
+      ...prev.slice(0, 49) 
     ]);
   }, []);
 
@@ -173,48 +160,47 @@ const App: React.FC = () => {
   const sendMidiMessageRef = (status: number, data1: number, data2: number) => {
       const access = midiAccessRef.current;
       const outputId = selectedOutputIdRef.current;
+      
       if (!access || !outputId) return;
       
       const output = access.outputs.get(outputId);
-      if (output) output.send([status, data1, data2]);
+      if (output) {
+          try {
+              output.send([status, data1, data2]);
+              const hexStatus = status.toString(16).toUpperCase();
+              addLog(`MIDI TX: [${hexStatus}, ${data1}, ${data2}]`, 'midi');
+          } catch(e) {
+              console.error(e);
+              addLog(`MIDI Error: ${e}`, 'error');
+          }
+      } else {
+          addLog(`MIDI Error: Output ${outputId} not found`, 'error');
+      }
   };
 
   // --- HIGH PERFORMANCE LOOP ---
   useEffect(() => {
-    // Check if we are in Electron before trying to listen
+    addLog('System: Starting Native Listeners...', 'info');
+
     if (!(window as any).require) {
         console.warn("Native IPC not available. Running in browser mode?");
+        addLog('Warning: Native IPC not detected (Browser Mode?)', 'error');
     }
 
-    // 1. The Listener updates the REF and handles MIDI (Instant)
     const handleControllerData = (event: any, data: XboxState) => {
-      const currentSettings = settingsRef.current;
       const currentMappings = mappingsRef.current;
       const prevProcessing = processingStateRef.current;
 
       const newState = { 
           ...data, 
           connected: true,
-          axes: [...data.axes] 
+          axes: [0,0,0,0] // Ensure axes are ignored
       };
       
       let hasActivity = false;
 
-      // --- PROCESS AXES (Deadzone & Smoothing) ---
-      newState.axes = newState.axes.map((rawVal, index) => {
-        // Apply Better Deadzone Math
-        const val = applyDeadzone(rawVal, currentSettings.deadzone);
-        
-        // Apply Smoothing (Low Pass Filter)
-        const prevVal = prevProcessing.axes[index] || 0;
-        const smoothed = prevVal + (val - prevVal) * (1 - currentSettings.smoothing);
-        
-        return smoothed;
-      });
-
-      // --- MIDI LOGIC ---
+      // --- MIDI LOGIC (Buttons Only) ---
       
-      // Buttons
       newState.buttons.forEach((pressed, index) => {
         if (pressed !== prevProcessing.buttons[index]) {
           hasActivity = true;
@@ -231,25 +217,10 @@ const App: React.FC = () => {
         }
       });
 
-      // Axes
-      newState.axes.forEach((val, index) => {
-        const prevVal = prevProcessing.axes[index] || 0;
-        // Only send if changed significantly (to reduce MIDI spam)
-        if (Math.abs(val - prevVal) > 0.02) { 
-          hasActivity = true;
-          const mapping = currentMappings.find(m => m.inputType === ControllerInputType.AXIS && m.controllerInputIndex === index);
-          if (mapping) {
-            // Map -1..1 to 0..127
-            const midiValue = Math.floor(((val + 1) / 2) * 127);
-            const statusByte = 0xB0 + (mapping.channel - 1);
-            sendMidiMessageRef(statusByte, mapping.targetNumber, midiValue);
-          }
-        }
-      });
+      // Analog Axes Processing Removed
 
       if (hasActivity) triggerSignal();
 
-      // Update refs
       processingStateRef.current = newState;
       latestXboxStateRef.current = newState;
     };
@@ -261,11 +232,9 @@ const App: React.FC = () => {
     ipcRenderer.on('native-controller-data', handleControllerData);
     ipcRenderer.on('native-log', handleLog);
     
-    // 2. The Animation Loop updates the UI (Throttled to Monitor Refresh Rate)
     let animationFrameId: number;
     const animate = () => {
         setXboxState(prev => {
-            // Only update state if data actually changed significantly to save renders
             if (prev !== latestXboxStateRef.current) {
                 return latestXboxStateRef.current;
             }
@@ -280,28 +249,59 @@ const App: React.FC = () => {
         ipcRenderer.removeAllListeners('native-log');
         cancelAnimationFrame(animationFrameId);
     };
-  }, []); // Empty dependency array ensures we don't re-bind listeners constantly
+  }, []);
 
-  // --- MIDI SETUP ---
   useEffect(() => {
     const initMidi = async () => {
       try {
-        if (!navigator.requestMIDIAccess) return;
+        if (!navigator.requestMIDIAccess) {
+            addLog('WebMIDI API not supported in this environment', 'error');
+            return;
+        }
+        addLog('Requesting MIDI Access...', 'info');
         const access = await navigator.requestMIDIAccess();
         setMidiAccess(access);
-        if (access.outputs.size > 0 && !selectedOutputId) setSelectedOutputId(access.outputs.values().next().value.id);
-      } catch (e) {}
+        addLog(`MIDI Access Granted. Inputs: ${access.inputs.size}, Outputs: ${access.outputs.size}`, 'info');
+        
+        if (access.outputs.size > 0 && !selectedOutputId) {
+            const firstId = access.outputs.values().next().value.id;
+            setSelectedOutputId(firstId);
+            addLog(`Auto-selected Output: ${firstId}`, 'info');
+        } else if (access.outputs.size === 0) {
+            addLog('No MIDI Outputs found (IAC Driver enabled?)', 'error');
+        }
+      } catch (e) {
+          addLog(`MIDI Init Error: ${e}`, 'error');
+      }
     };
     initMidi();
   }, []);
 
   // --- CRUD ---
-  const updateMapping = (id: string, field: keyof MidiMapping, value: any) => setMappings(p => p.map(m => m.id === id ? { ...m, [field]: value } : m));
-  const deleteMapping = (id: string) => setMappings(p => p.filter(m => m.id !== id));
-  const addNewMapping = () => setMappings(p => [...p, { id: Date.now().toString(), controllerInputIndex: 0, inputType: ControllerInputType.BUTTON, midiType: MidiMessageType.NOTE_ON, channel: 1, targetNumber: 60, label: 'New Control' }]);
-  const resetMappings = () => { if(confirm('Reset?')) setMappings(DEFAULT_MAPPINGS); }
+  const updateMapping = (id: string, field: keyof MidiMapping, value: any) => {
+      setMappings(p => p.map(m => m.id === id ? { ...m, [field]: value } : m));
+      if (field !== 'label' && field !== 'targetNumber') {
+        addLog(`Mapping Updated: ${field} -> ${value}`, 'info');
+      }
+  };
+  
+  const deleteMapping = (id: string) => {
+      setMappings(p => p.filter(m => m.id !== id));
+      addLog('Mapping Deleted', 'info');
+  };
+  
+  const addNewMapping = () => {
+      setMappings(p => [...p, { id: Date.now().toString(), controllerInputIndex: 0, inputType: ControllerInputType.BUTTON, midiType: MidiMessageType.NOTE_ON, channel: 1, targetNumber: 60, label: 'New Control' }]);
+      addLog('New Mapping Added', 'info');
+  };
+  
+  const resetMappings = () => { 
+      if(confirm('Reset?')) {
+          setMappings(DEFAULT_MAPPINGS);
+          addLog('Mappings Reset to Defaults', 'info');
+      }
+  }
 
-  // --- STYLING VARIABLES (Glass & Metal) ---
   const style = {
     appBg: isDark ? 'bg-[#0f1012]' : 'bg-[#eef2f6]',
     appGradient: isDark ? 'bg-radial-dark' : 'bg-radial-light',
@@ -319,12 +319,14 @@ const App: React.FC = () => {
         isTransmitting={isTransmitting}
         isOutputReady={!!selectedOutputId}
         selectedOutputId={selectedOutputId}
-        setSelectedOutputId={setSelectedOutputId}
+        setSelectedOutputId={(id) => {
+            setSelectedOutputId(id);
+            addLog(`Manual Output Switch: ${id}`, 'info');
+        }}
         midiAccess={midiAccess}
         onOpenSettings={() => { setIsSettingsOpen(true); setShowChangelog(false); }}
       />
 
-      {/* MAIN CONTENT AREA */}
       <div className="flex flex-1 overflow-hidden p-8 gap-8 pt-2">
         
         {/* LEFT: VISUALIZER */}
@@ -333,7 +335,6 @@ const App: React.FC = () => {
            <div className="absolute top-6 right-6 w-3 h-3 rounded-full border border-current opacity-20 flex items-center justify-center"><div className="w-1.5 h-0.5 bg-current rotate-45"></div></div>
            
            <div className="flex-1 flex flex-col items-center justify-center p-10 relative z-10">
-              
               <ControllerVisualizer state={xboxState} accentColor={settings.accentColor} isDark={isDark} />
               
               <div className={`mt-8 flex flex-col items-center gap-3 transition-opacity duration-500 ${xboxState.connected ? 'opacity-0' : 'opacity-100'}`}>
@@ -370,7 +371,6 @@ const App: React.FC = () => {
         />
       </div>
 
-      {/* SETTINGS MODAL */}
       {isSettingsOpen && (
         <SettingsModal 
             settings={settings}
